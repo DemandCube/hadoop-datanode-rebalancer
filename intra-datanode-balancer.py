@@ -33,7 +33,7 @@ def abs_path(root):
 
 def size_info(file_list):
     for entry in file_list:
-        entry['size'] = os.path.getsize(entry['path'])
+        entry['size'] = os.path.getsize(entry['path']) + os.path.getsize(entry['metapath'])
     return sorted(file_list, key=lambda entry: entry['size'], reverse=True) #sort by size
 
 
@@ -46,14 +46,14 @@ def get_takers(partition_dict, balanced_threshold):
     return a list of partitions that are below the balanced threshold.
 
     """
-    return [k for k,v in partition_dict.items() if v['partition_size'] > balanced_threshold]
+    return [k for k,v in partition_dict.items() if v['partition_size'] < balanced_threshold]
 
 
 def get_givers(partition_dict, balanced_threshold):
     """
     Return a list of partitions that are above the balanced threshold.
     """
-    return [k for k,v in partition_dict.items() if v['partition_size'] < balanced_threshold]
+    return [k for k,v in partition_dict.items() if v['partition_size'] > balanced_threshold]
 
 
 def move_file_generator(give_lst, balanced_threshold):
@@ -61,14 +61,21 @@ def move_file_generator(give_lst, balanced_threshold):
     for g in give_lst:
         partition_entry = partition_dict[g]
         partition_size = partition_entry['partition_size']
+        partition_path = partition_entry['partition_path']
+
         file_entry_lst = partition_entry['files']
 
         delta_size = partition_size - balanced_threshold
         taken_size = 0
-        for f_entry in file_entry_lst:
-            if delta_size < taken_size:
-                taken_size += f_entry['size']
-                yield (f_entry['partition_path'], f_entry['name'], f_entry['size'])
+        for idx, f_entry in enumerate(file_entry_lst):
+            f_entry_size = f_entry['size']
+            if (taken_size + f_entry_size) < delta_size:
+                print "giver: balanced_threshold : %f | total_partition_size: %f" % (balanced_threshold, partition_size - taken_size)
+                taken_size += f_entry_size
+                del file_entry_lst[idx]
+                yield (partition_path, f_entry['path'], f_entry['metapath'], f_entry_size)
+            else:
+                print "skip"
 
 
 def get_dst_path(src_partition_path, dst_partition_path, src_name):
@@ -79,11 +86,12 @@ def get_dst_path(src_partition_path, dst_partition_path, src_name):
     return src_name.replace(src_partition_path, dst_partition_path)
 
 
-def rebalance_manifest(giver_lst, taker_lst, balanced_threshold, partition_dict):
-    g = move_file_generator(giver_lst)
+def rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict):
     src_dst_dict = {} # key: src path, value dst path
 
-    for t in taker_lst:
+    for t in takers_lst:
+        g = move_file_generator(givers_lst, balanced_threshold)
+        print "dealing with another taker"
         partition_entry = partition_dict[t]
         partition_size = partition_entry['partition_size']
         dest_partition_path = partition_entry['partition_path']
@@ -92,10 +100,16 @@ def rebalance_manifest(giver_lst, taker_lst, balanced_threshold, partition_dict)
         stolen_size = 0
 
         while stolen_size < delta_size:
-            src_partition_path, src_name, f_size = next(g)
-            stolen_size += f_size
-            src_dst_dict[src_name] = get_dst_path(src_partition_path, dest_partition_path, src_name)
+            try:
+                print "taker > balanced_threshold : %f | total_partition_size: %f" % (balanced_threshold, partition_size + stolen_size)
+                src_partition_path, src_path, src_meta_path, f_size = next(g)
+                if (stolen_size + f_size) < delta_size:
+                    stolen_size += f_size
+                    src_dst_dict[src_path] = get_dst_path(src_partition_path, dest_partition_path, src_path)
+            except StopIteration:
+                break
 
+    return src_dst_dict
 
 
 
@@ -105,7 +119,7 @@ if __name__=="__main__":
     for path in ROOT_PATH:
         file_lst = abs_path(path)
         file_lst = size_info(file_lst)
-        partition_dict[path] = {'files': file_lst, 'partition_size': calc_total_size(file_lst), 'partition_path': path}
+        partition_dict[path] = { 'files': file_lst, 'partition_size': calc_total_size(file_lst), 'partition_path': path }
 
 
     balanced_threshold = sum(v['partition_size'] for k,v in partition_dict.items()) / float(len(ROOT_PATH))
@@ -113,6 +127,9 @@ if __name__=="__main__":
     takers_lst = get_takers(partition_dict, balanced_threshold)
     givers_lst = get_givers(partition_dict, balanced_threshold)
 
+    manifest_dict = rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict)
+
+    import pdb; pdb.set_trace()
 
 
 
