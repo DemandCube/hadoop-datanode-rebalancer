@@ -1,4 +1,5 @@
 import os
+import re
 
 # TODO: hardcoded for now
 ROOT_PATH = [
@@ -6,16 +7,27 @@ ROOT_PATH = [
     "/Users/lchen/Documents/workspace/test_partition_data/hadoop1/",
     "/Users/lchen/Documents/workspace/test_partition_data/hadoop2/",
 ]
+META_REGEX = re.compile(r".*?\.meta$")
 
 def abs_path(root):
     """
     input: root: absolute path. Need to be the same as the hdfs-site.xml
-    output: [ {name: filename, size: None}, ...]
+    output: [ {path: filename, size: None}, ...]
+
+    output: [ {path: filename, metapath: metafilename, size: None}, ...]
+            size := size(filename) + size(metafilename)
+    Assumption: the data block file and the meta file come in pair.
     """
     r = []
+    # grab only the meta file paths
     for dirpath, dirnames, filenames in os.walk(root):
         if len(filenames) > 0:
-            r += [dict([("path", "%s/%s" % (dirpath, f)), ("size", None)])  for f in filenames]
+            r += [ dict([("metapath", "%s/%s" % (dirpath, f)), ("size", None)])  for f in filenames if META_REGEX.search(f) != None ]
+
+    # insert the data block paths
+    for entry in r:
+        entry['path'] = "_".join(entry['metapath'].split("_")[:-1])
+
     return r
 
 
