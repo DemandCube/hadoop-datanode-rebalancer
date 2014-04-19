@@ -1,13 +1,10 @@
 import os
 import re
+import sys
 import shutil
+from optparse import OptionParser
+import xml.etree.ElementTree as ET
 
-# TODO: hardcoded for now
-ROOT_PATH = [
-    "/Users/lchen/Documents/workspace/test_partition_data/hadoop/",
-    "/Users/lchen/Documents/workspace/test_partition_data/hadoop1/",
-    "/Users/lchen/Documents/workspace/test_partition_data/hadoop2/",
-]
 META_REGEX = re.compile(r".*?\.meta$")
 
 def abs_path(root):
@@ -124,20 +121,49 @@ def exec_rebalance_manifest(manifest_dict):
             os.makedirs(target_dir)
 
 
+def parse_hdfs_site_xml(hdfs_site_path):
+    tree = ET.parse(hdfs_site_path)
+    root = tree.getroot()
+    dn_data_dir = None
+    for p in root.findall('property'):
+        name_v = next(p.iterfind('name')).text
+        if name_v == 'dfs.datanode.data.dir':
+            dn_data_dir = next(p.iterfind('value')).text
+    return dn_data_dir.split(",")
+
+
 if __name__=="__main__":
+    parser = OptionParser()
+    parser.add_option("-c", "--config", dest='hdfs_site', help="hdfs-site.xml's full path.")
+    parser.add_option("-p", "--partitons", dest='partitions', help="The list of partitions (comma separated).")
+
+    (options, args) = parser.parse_args()
+
+    if options.partitions and options.hdfs_site:
+        print "Can't supply both -c and -p options. Supply one or the other."
+        sys.exit(1)
+    if not options.partitions and not options.hdfs_site:
+        print "Must supply -c or -p options."
+        sys.exit(1)
+
+    if options.hdfs_site != None:
+        root_path = parse_hdfs_site_xml(options.hdfs_site)
+    elif options.partitons != None:
+        root_path = options.partions.split(",")
+
+
     partition_dict = {} # {'files' : [{'name': ... , 'size':...}], 'partitions_size': {'file' : [..], 'partition_size': size }}
 
-    for path in ROOT_PATH:
+    for path in root_path:
         file_lst = abs_path(path)
         file_lst = size_info(file_lst)
         partition_dict[path] = { 'files': file_lst, 'partition_size': calc_total_size(file_lst), 'partition_path': path }
 
 
-    balanced_threshold = sum(v['partition_size'] for k,v in partition_dict.items()) / float(len(ROOT_PATH))
+    balanced_threshold = sum(v['partition_size'] for k,v in partition_dict.items()) / float(len(root_path))
     print balanced_threshold
     takers_lst = get_takers(partition_dict, balanced_threshold)
     givers_lst = get_givers(partition_dict, balanced_threshold)
-    import pdb; pdb.set_trace() #xxx
 
 
     manifest_dict = gen_rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict)
