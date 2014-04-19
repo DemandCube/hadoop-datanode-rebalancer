@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 
 # TODO: hardcoded for now
 ROOT_PATH = [
@@ -86,7 +87,7 @@ def get_dst_path(src_partition_path, dst_partition_path, src_name):
     return src_name.replace(src_partition_path, dst_partition_path)
 
 
-def rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict):
+def gen_rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict):
     src_dst_dict = {} # key: src path, value dst path
 
     for t in takers_lst:
@@ -112,6 +113,16 @@ def rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dic
     return src_dst_dict
 
 
+def exec_rebalance_manifest(manifest_dict):
+    for src, dst in manifest_dict.items():
+        print "moving %s to %s" % (src, dst)
+        try:
+            shutil.move(src, dst)
+        except IOError:
+            # need to create the directory
+            target_dir = "/".join(dst.split("/")[:-1])
+            os.makedirs(target_dir)
+
 
 if __name__=="__main__":
     partition_dict = {} # {'files' : [{'name': ... , 'size':...}], 'partitions_size': {'file' : [..], 'partition_size': size }}
@@ -126,10 +137,12 @@ if __name__=="__main__":
     print balanced_threshold
     takers_lst = get_takers(partition_dict, balanced_threshold)
     givers_lst = get_givers(partition_dict, balanced_threshold)
+    import pdb; pdb.set_trace() #xxx
 
-    manifest_dict = rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict)
 
-    import pdb; pdb.set_trace()
+    manifest_dict = gen_rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition_dict)
+    exec_rebalance_manifest(manifest_dict)
+
 
 
 
