@@ -104,6 +104,7 @@ def gen_rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition
                 if (stolen_size + f_size) < delta_size:
                     stolen_size += f_size
                     src_dst_dict[src_path] = get_dst_path(src_partition_path, dest_partition_path, src_path)
+                    src_dst_dict[src_meta_path] = get_dst_path(src_partition_path, dest_partition_path, src_meta_path)
             except StopIteration:
                 break
 
@@ -119,6 +120,7 @@ def exec_rebalance_manifest(manifest_dict):
             # need to create the directory
             target_dir = "/".join(dst.split("/")[:-1])
             os.makedirs(target_dir)
+            shutil.move(src, dst)
 
 
 def parse_hdfs_site_xml(hdfs_site_path):
@@ -148,9 +150,8 @@ if __name__=="__main__":
 
     if options.hdfs_site != None:
         root_path = parse_hdfs_site_xml(options.hdfs_site)
-    elif options.partitons != None:
-        root_path = options.partions.split(",")
-
+    elif options.partitions != None:
+        root_path = options.partitions.split(",")
 
     partition_dict = {} # {'files' : [{'name': ... , 'size':...}], 'partitions_size': {'file' : [..], 'partition_size': size }}
 
