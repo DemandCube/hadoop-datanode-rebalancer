@@ -54,7 +54,7 @@ def get_givers(partition_dict, balanced_threshold):
     return [k for k,v in partition_dict.items() if v['partition_size'] > balanced_threshold]
 
 
-def move_file_generator(give_lst, balanced_threshold):
+def move_file_generator(give_lst, balanced_threshold, partition_dict):
     # best fit
     for g in give_lst:
         partition_entry = partition_dict[g]
@@ -88,7 +88,7 @@ def gen_rebalance_manifest(givers_lst, takers_lst, balanced_threshold, partition
     src_dst_dict = {} # key: src path, value dst path
 
     for t in takers_lst:
-        g = move_file_generator(givers_lst, balanced_threshold)
+        g = move_file_generator(givers_lst, balanced_threshold, partition_dict)
         print "dealing with another taker"
         partition_entry = partition_dict[t]
         partition_size = partition_entry['partition_size']
@@ -153,7 +153,7 @@ if __name__=="__main__":
     elif options.partitions != None:
         root_path = options.partitions.split(",")
 
-    partition_dict = {} # {'files' : [{'name': ... , 'size':...}], 'partitions_size': {'file' : [..], 'partition_size': size }}
+    partition_dict = {} # {'files' : [{'path': ... , 'metapath': ..., 'size':...}], 'partitions_size': {'file' : [..], 'partition_size': size }}
 
     for path in root_path:
         file_lst = abs_path(path)
